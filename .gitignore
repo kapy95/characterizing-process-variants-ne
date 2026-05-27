@@ -1,0 +1,11 @@
+
+__pycache__/
+*.xes
+*.csv
+*.joblib
+*.json
+*.xlsx
+*.png
+*.pdf
+
+!Data/road_traffic/A_Fresh_Approach_to_Analyze_Process_Outcomes/out_df.csv
