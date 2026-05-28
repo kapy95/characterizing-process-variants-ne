@@ -156,7 +156,7 @@ def findChampionsInSpecificClassProbs(x_train_bin_class, probs_y_train, bin_clas
 
 
 
-def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_labelX, class_labelY, X_test):
+def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_labelX, class_labelY, X_train):
     """
     Description: this function looks for the two closest boundary cases between cases. With boundary cases we understand cases whose prediction in the ensemble tree is the corresponding one to its real class (e.g., if the 
     class of a trace t1 is X, its class is predicted as X in the tree), but in terms of prediction probabilities another class Y is close to class X probability (e.g., prediction=[Probs to belong to X: 0.6, Probs to belong to Y: 0.4])
@@ -187,8 +187,8 @@ def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_lab
     best_boundary_cases_classY=df_sorted_classY.iloc[0:10]
 
     #we filter these cases in X_test
-    filtered_cases_classX=X_test.filter(items=list(best_boundary_cases_classX.index), axis=0).fillna(-100)#to be able to calculate the distance, we fill nan values for -1 whihc is -100 in the current scale
-    filtered_cases_classY=X_test.filter(items=list(best_boundary_cases_classY.index), axis=0).fillna(-100)
+    filtered_cases_classX=X_train.filter(items=list(best_boundary_cases_classX.index), axis=0).fillna(-100)#to be able to calculate the distance, we fill nan values for -1 whihc is -100 in the current scale
+    filtered_cases_classY=X_train.filter(items=list(best_boundary_cases_classY.index), axis=0).fillna(-100)
 
     #Finally we calculate the similarity between the cases based on the euclidean distance between the confidences of declare rules
     matrixBoundaryCases=cdist(filtered_cases_classX.values, filtered_cases_classY.values)

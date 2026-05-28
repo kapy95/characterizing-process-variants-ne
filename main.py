@@ -195,7 +195,7 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
                                                                                   df_probs_class_y=df_probs_classJ,
                                                                                   class_labelX=i,
                                                                                   class_labelY=j,
-                                                                                  X_test=X_train)
+                                                                                  X_train=X_train)
             #Filter only the columns of the cases that the most important
             boundaryCaseClassX=boundaryCaseClassX[most_important_features]
             boundaryCaseClassJ=boundaryCaseClassJ[most_important_features]
