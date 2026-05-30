@@ -1,5 +1,6 @@
 #Ensemble tree model
 import xgboost as xgb
+import sklearn
 
 
 #Data management:
@@ -75,15 +76,19 @@ def measureClassifierPerformance(specific_clf, label_clf, X_test, y_test, le_nam
     labels=[]
     classifiers_labels=[]
     values_labels=list(le_name_mapping_dataset.keys())
-    d_test = xgb.DMatrix(X_test)
-
-
+    if type(specific_clf)==xgb.core.Booster:
+        d_test = xgb.DMatrix(X_test)
+        y_pred_probs_test=specific_clf.predict(d_test)
+        if len(set(y_test))>2:
+            y_pred_test=[np.argmax(probs) for probs in y_pred_probs_test]
+        else:
+            y_pred_test=[np.argmax([1-probs, probs]) for probs in y_pred_probs_test]
+    elif type(specific_clf)==sklearn.ensemble._hist_gradient_boosting.gradient_boosting.HistGradientBoostingClassifier:
+        y_pred_test=specific_clf.predict(X_test)
+    
     joblib.dump(specific_clf, dirResults+"/clf_val"+str(label_clf)+".joblib")
-    y_pred_probs_test=specific_clf.predict(d_test)
-    if len(set(y_test))>2:
-        y_pred_test=[np.argmax(probs) for probs in y_pred_probs_test]
-    else:
-        y_pred_test=[np.argmax([1-probs, probs]) for probs in y_pred_probs_test]
+    
+
                          
     dirClfMap=dirResults+"/heatmap_clf_val"+str(label_clf)+".pdf"
     generateDataMap(y_real_test_map=y_test,
@@ -156,7 +161,7 @@ def findChampionsInSpecificClassProbs(x_train_bin_class, probs_y_train, bin_clas
 
 
 
-def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_labelX, class_labelY, X_train):
+def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_labelX, class_labelY, X):
     """
     Description: this function looks for the two closest boundary cases between cases. With boundary cases we understand cases whose prediction in the ensemble tree is the corresponding one to its real class (e.g., if the 
     class of a trace t1 is X, its class is predicted as X in the tree), but in terms of prediction probabilities another class Y is close to class X probability (e.g., prediction=[Probs to belong to X: 0.6, Probs to belong to Y: 0.4])
@@ -166,7 +171,7 @@ def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_lab
         - df_probs_class_y: dataframe whose rows represent cases and the columns represent the predicted probabilities to belong to a class. The class of all cases is predicted as Y
         - class_labelY: class Y label used by the label encoder. It will be used to know the name of the column of class Y probabilities in the dataframes
         - class labelX: class X label used by the label encoder. It will be used to know the name of the column of class X probabilities in the dataframes
-        - X_test: dataframe whose rows represent cases, and the columns confidences to declare rules.
+        - X: dataframe whose rows represent cases, and the columns confidences to declare rules.
     
     Output:
         - Pair of boundary cases between classes X and Y
@@ -186,9 +191,9 @@ def boundaryCasesBetweenTwoClasses(df_probs_class_x, df_probs_class_y, class_lab
     best_boundary_cases_classX=df_sorted_classX.iloc[0:10]
     best_boundary_cases_classY=df_sorted_classY.iloc[0:10]
 
-    #we filter these cases in X_test
-    filtered_cases_classX=X_train.filter(items=list(best_boundary_cases_classX.index), axis=0).fillna(-100)#to be able to calculate the distance, we fill nan values for -1 whihc is -100 in the current scale
-    filtered_cases_classY=X_train.filter(items=list(best_boundary_cases_classY.index), axis=0).fillna(-100)
+    #we filter these cases in X
+    filtered_cases_classX=X.filter(items=list(best_boundary_cases_classX.index), axis=0).fillna(-100)#to be able to calculate the distance, we fill nan values for -1 whihc is -100 in the current scale
+    filtered_cases_classY=X.filter(items=list(best_boundary_cases_classY.index), axis=0).fillna(-100)
 
     #Finally we calculate the similarity between the cases based on the euclidean distance between the confidences of declare rules
     matrixBoundaryCases=cdist(filtered_cases_classX.values, filtered_cases_classY.values)

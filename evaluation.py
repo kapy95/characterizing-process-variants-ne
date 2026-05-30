@@ -202,10 +202,16 @@ dataset=args.data
 folder=args.folder
 
 if dataset=="sepsis":
-    mined_dataset_route="./Data/sepsis/mined_sepsis_confidences_SIRS2OrMore.csv"
+    if "bag" in folder:
+        mined_dataset_route="./Data/sepsis/sorted_dataset_sepsis_bag_of_activities.csv"
+    else:
+        mined_dataset_route="./Data/sepsis/mined_sepsis_confidences_SIRS2OrMore.csv"
     specific_log_route="./Data/sepsis/sepsis.xes"
 else:
-    mined_dataset_route="./Data/road_traffic/mined_rtfm_relabelled_confidences.csv"
+    if "bag" in folder:
+        mined_dataset_route="./Data/sorted_road_traffic/dataset_rtfm_bag_of_activities.csv"
+    else:
+        mined_dataset_route="./Data/road_traffic/mined_rtfm_relabelled_confidences.csv"
     specific_log_route="./Data/road_traffic/Road_Traffic_Fine_Management_Process.xes"
 
 evaluationPrototypes(dataset_route=mined_dataset_route,

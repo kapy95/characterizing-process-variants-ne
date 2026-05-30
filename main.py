@@ -10,6 +10,7 @@ import xgboost as xgb
 import argparse
 import pm4py
 
+from sklearn.ensemble import HistGradientBoostingClassifier
 
 #Library to load models:
 import joblib
@@ -22,7 +23,7 @@ warnings.filterwarnings("ignore")
 
 
 
-def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_sizes, param_dist, size, strat_bool, le_name_mapping, dirRes, training, classifier_route):
+def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_sizes, param_dist, size, strat_bool, le_name_mapping, dirRes, training, classifier_route, classifier_type, limited_size_tr=None):
     if training==True:
         print("Training classifiers....")
         if strat_bool==True:
@@ -32,24 +33,52 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
         else:
             strats=None
             shuff=False
-
-        
-        X_train, X_val, y_train, y_val = train_test_split(X_train_and_validation,
-                                                          y_train_and_validation,
-                                                          test_size=size,
-                                                          stratify=strats,
-                                                          shuffle=shuff,
-                                                          random_state=0)
-
-        clf_specific_size_val, eval_results=createAndTrainXGB_early_stop(X_train,
-                                                                         y_train,
-                                                                         X_val,
-                                                                         y_val, 
-                                                                         param_dist)
-
         dict_result={}
-        dict_result["mlogloss-training"]=list(eval_results["train"].values())[0]
-        dict_result["mlogloss-validation"]=list(eval_results["validation"].values())[0]
+        if classifier_type=="XGB":
+
+            X_train, X_val, y_train, y_val = train_test_split(X_train_and_validation,
+                                                              y_train_and_validation,
+                                                              test_size=size,
+                                                              stratify=strats,
+                                                              shuffle=shuff,
+                                                              random_state=0)
+            
+            if limited_size_tr!=None:
+                limited_size_tr=float(limited_size_tr)
+                X_train, X_train_discarded, y_train, y_train_discarded = train_test_split(X_train,
+                                                                                          y_train,
+                                                                                          test_size=limited_size_tr,
+                                                                                          stratify=y_train,
+                                                                                          shuffle=shuff,
+                                                                                          random_state=0)
+
+            clf_specific_size_val, eval_results=createAndTrainXGB_early_stop(X_train,
+                                                                            y_train,
+                                                                            X_val,
+                                                                            y_val, 
+                                                                            param_dist)
+            training_loss=list(eval_results["train"].values())[0]
+            validation_loss=list(eval_results["validation"].values())[0]
+        elif classifier_type=="histGradient":
+            clf_specific_size_val = HistGradientBoostingClassifier(early_stopping=True,#enable early stopping
+                                                                   random_state=0,#set the state for reproducibility
+                                                                   validation_fraction=size,#histGradient does not pass the validation directly, instead a proportion is indicated
+                                                                   n_iter_no_change=5)#number of patience rounds doing early stopping
+            clf_specific_size_val.fit(X=X_train_and_validation,
+                                      y=y_train_and_validation)
+            
+            #to look for the prototypes later, we reconstruct the training and validation sets used by histgradient using the seed of the classifier
+            #(Within the code of the library is done like this)
+            X_train, X_val, y_train, y_val = train_test_split(X_train_and_validation,
+                                                              y_train_and_validation,
+                                                              test_size=size,
+                                                              stratify=y_train_and_validation,
+                                                              random_state=clf_specific_size_val._random_seed)
+            training_loss=list(clf_specific_size_val.train_score_)
+            validation_loss=list(clf_specific_size_val.validation_score_)
+
+        dict_result["mlogloss-training"]=training_loss
+        dict_result["mlogloss-validation"]=validation_loss
         pd.DataFrame.from_dict(dict_result).to_csv(dirRes+"/eval_results_clf"+".csv")
         
         print("Measuring performance...")
@@ -107,11 +136,15 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
         positions_train_instances_class_label=np.where(y_train == encoded_class_label)#find the indices of the instances of that class in the train data
         X_train_class_label=X_train.iloc[positions_train_instances_class_label]#filter the test data to just contain the instances related to that class
 
-         #after finding the champion, we prepare the test instances related to that class so that we can look later for the boundary cases:
-        d_train_class_label=xgb.DMatrix(X_train_class_label)#we transform the dataframe to DMatrix so that the model can perform predictions on it, this is necessary, because we use the xgboost api for the model
-        predicts_probs_cases_bin_class=clf_specific_size_val.predict(d_train_class_label)#Example: probs_y_train=[ Trace1:[class1: 0.2, class2: 0.5, class3:0.3] , Trace2[class1: 0.9, class2: 0.1, class3:0.0], ...]
-        if len(set(y_train))==2:#if it is a binary classification problem, we have just one predicted probability which belongs to class 1, we calculate the other one now:
-            predicts_probs_cases_bin_class=[[1-prob, prob] for prob in predicts_probs_cases_bin_class]
+        #after finding the champion, we prepare the test instances related to that class so that we can look later for the boundary cases:
+
+        if classifier_type=="XGB":#if the used classifier is xgboost        
+            d_train_class_label=xgb.DMatrix(X_train_class_label)#we transform the dataframe to DMatrix so that the model can perform predictions on it, this is necessary, because we use the xgboost api for the model
+            predicts_probs_cases_bin_class=clf_specific_size_val.predict(d_train_class_label)#Example: probs_y_train=[ Trace1:[class1: 0.2, class2: 0.5, class3:0.3] , Trace2[class1: 0.9, class2: 0.1, class3:0.0], ...]
+            if len(set(y_train))==2:#if it is a binary classification problem, we have just one predicted probability which belongs to class 1, we calculate the other one now:
+                predicts_probs_cases_bin_class=[[1-prob, prob] for prob in predicts_probs_cases_bin_class]
+        else:
+            predicts_probs_cases_bin_class=clf_specific_size_val.predict_proba(X_train_class_label)
 
         #Find the champion of the class (i.e., the instance with a highest predicted probability to belong to its class).
         champion_class_label=findChampionsInSpecificClassProbs(X_train_class_label,
@@ -141,8 +174,6 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
                                                          encoded_class_label,
                                                          numerical_index_champion,
                                                          classification_type=classif_type)
-        
-        
         #feature values champion:
         feature_values_ch=X_train.loc[case_id_champion]
 
@@ -158,11 +189,13 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
         x_train_filtered = X_train_class_label[[bool(x) for x in correct_predictions]]
 
         #we obtain the predicted probabilty of each class for each filtered instance:
-        d_train_filtered=xgb.DMatrix(x_train_filtered)
-        probs_y_train=clf_specific_size_val.predict(d_train_filtered)
-
-        if len(set(y_train))==2:#if it is a binary classification problem, we have just one predicted probability which belongs to class 1, we calculate the other one now:
-            probs_y_train=[[1-prob, prob] for prob in probs_y_train]
+        if classifier_type=="XGB":
+            d_train_filtered=xgb.DMatrix(x_train_filtered)
+            probs_y_train=clf_specific_size_val.predict(d_train_filtered)
+            if len(set(y_train))==2:#if it is a binary classification problem, we have just one predicted probability which belongs to class 1, we calculate the other one now:
+                probs_y_train=[[1-prob, prob] for prob in probs_y_train]
+        else:
+            probs_y_train=clf_specific_size_val.predict_proba(x_train_filtered)
 
         cases=x_train_filtered.index.to_list()#we obtain their case ids
         #Transform the probabilities of the filtered instances into a dataframe 
@@ -195,7 +228,7 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
                                                                                   df_probs_class_y=df_probs_classJ,
                                                                                   class_labelX=i,
                                                                                   class_labelY=j,
-                                                                                  X_train=X_train)
+                                                                                  X=X_train)
             #Filter only the columns of the cases that the most important
             boundaryCaseClassX=boundaryCaseClassX[most_important_features]
             boundaryCaseClassJ=boundaryCaseClassJ[most_important_features]
@@ -270,19 +303,37 @@ def main(X_train_and_validation, y_train_and_validation, X_test, y_test, case_si
 print("Reading dataset file...")
 
 parser = argparse.ArgumentParser(description="Pipeline launcher")
-parser.add_argument("data", help="Dataset to be used")
+parser.add_argument("data", help="Dataset to be used: sepsis or rtfm")
+parser.add_argument("classifier", help="Classifier to be used: XGBoost (XGB) or HistGradientBoostingClassifier (histGradient)")
+parser.add_argument("features",help="Features to be used. The following values are available: declare_rules or bag_activities")
+parser.add_argument("--limited_training_data", default=None, help="Training data proportion to be discarded so that it can be checked how the approach worsens (OPTIONAL)")
 args = parser.parse_args()
 
 data=args.data
+features=args.features
+selected_clf_type=args.classifier
+limited_size_tr_data=args.limited_training_data
 
 if data=="rtfm":
+    print("Using rtfm")
     log_route="./Data/road_traffic/Road_Traffic_Fine_Management_Process.xes"
-    dataset_route="./Data/road_traffic/mined_rtfm_relabelled_confidences.csv"
+    if features=="declare_rules":
+        print("Using declare rule features")
+        dataset_route="./Data/road_traffic/mined_rtfm_relabelled_confidences.csv"
+    else:
+        print("Using bag of activities features")
+        dataset_route="./Data/road_traffic/sorted_dataset_rtfm_bag_of_activities.csv"
     dataset=pd.read_csv(dataset_route, index_col=0)
     resultsFolder="./results/Ours/rtfm/"
 else:
+    print("Using sepsis")
     log_route="./Data/sepsis/sepsis.xes"
-    dataset_route="./Data/sepsis/mined_sepsis_confidences_SIRS2OrMore.csv"
+    if features=="declare_rules":
+        print("Using declare rule features")
+        dataset_route="./Data/sepsis/mined_sepsis_confidences_SIRS2OrMore.csv"
+    else:
+        print("Using bag of activities features")
+        dataset_route="./Data/sepsis/sorted_dataset_sepsis_bag_of_activities.csv"
     #we change how missing values are identified, because one case id is NA but it does not mean missing value.
     missing_values = ['nan', 'null', 'None', '']#we specify some of the general interpretations for nan values, but no NA as a string
     #then we read the dataset specifying that we will not use the default definition of NA of pandas, instead we specificy it with the previous values
@@ -315,7 +366,11 @@ X_train_and_validation, X_test, y_train_and_validation, y_test = train_test_spli
                                                                                   random_state=0)#set a seed so that it is possible to replicate it and it does not change between executions
 
 now=datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-dirResults=resultsFolder+now
+if limited_size_tr_data==None:
+    dirResults=resultsFolder+features+"-"+selected_clf_type+"-"+now
+else:
+    dirResults=resultsFolder+features+"-"+selected_clf_type+"-"+"limited_tr_data"+str(limited_size_tr_data)+now
+
 os.mkdir(dirResults)
 size_val=0.2
 stratf=True
@@ -335,5 +390,18 @@ else:
 classifier_route=""
 training=True
 
-main(X_train_and_validation, y_train_and_validation, X_test, y_test, series_case_sizes, param_dist, size_val, stratf, le_name_mapping, dirResults, training, classifier_route)
+main(X_train_and_validation,
+     y_train_and_validation,
+     X_test,
+     y_test,
+     series_case_sizes,
+     param_dist,
+     size_val,
+     stratf,
+     le_name_mapping,
+     dirResults,
+     training, 
+     classifier_route,
+     classifier_type=selected_clf_type,
+     limited_size_tr=limited_size_tr_data)
 
