@@ -28,8 +28,10 @@ How to run the approach to obtain the prototypes and boundary cases for a given 
   2. Classifier: type of classifier to be used. Use XGB for XGBoost or histGradient for HistGradientBoostingClassifier
   3. Features: features to be used during the training. Two options are available: declare_rules for declare rule confidences or bag_activities for frequencies of activities.
   4. Optionally you can set the fraction of the training data to be discarded, if you want to try the approach with less training data.
-For example if you want to execute the approach with the sepsis log using XGBoost as classifier and declare rule features, you would do the following:
+
+For example if you want to execute the approach with the sepsis log using XGBoost as classifier and declare rule features, you would do the following (no training data is discarded):
 python main.py sepsis XGB declare_rules
+
 And if you want to do the same but use 70% less training data you would do the following:
 python main.py sepsis XGB declare_rules --limited_training_data 0.7    
 
