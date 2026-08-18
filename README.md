@@ -23,9 +23,15 @@ How to run the approach to obtain the prototypes and boundary cases for a given 
 0. Make sure that the folders of the one drive link are inside the data folder
 1. Open an anaconda console and activate the preparation environment (conda activate naturalexamples)
 2. Change the current directory to the repository directory
-3. Execute one of the following commands depending on the log:
-    1. python main.py sepsis
-    2. python main.py rtfm
+3. Execute the main.py file using the following options:
+  1. Data: dataset to be used (two options are available: sepsis or rtfm)
+  2. Classifier: type of classifier to be used. Use XGB for XGBoost or histGradient for HistGradientBoostingClassifier
+  3. Features: features to be used during the training. Two options are available: declare_rules for declare rule confidences or bag_activities for frequencies of activities.
+  4. Optionally you can set the fraction of the training data to be discarded, if you want to try the approach with less training data.
+For example if you want to execute the approach with the sepsis log using XGBoost as classifier and declare rule features, you would do the following:
+python main.py sepsis XGB declare_rules
+And if you want to do the same but use 70% less training data you would do the following:
+python main.py sepsis XGB declare_rules --limited_training_data 0.7    
 
 After running the script, a folder with the date related to execution will be created inside the /results/Ours/sepsis or /results/Ours/rtfm directories. When running the main.py file with the rtfm log beware that its execution will require around 10GB of free RAM for its use, or it could run out of RAM otherwsie. 
 
